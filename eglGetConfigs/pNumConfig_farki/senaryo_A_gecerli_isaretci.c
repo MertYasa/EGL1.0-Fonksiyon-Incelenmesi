@@ -1,33 +1,48 @@
 #include "../common/common_utils.h"
 
 int main() {
-    printf("--- SENARYO B: pNumConfig NULL Verilmesi (Gorsel Sonuclu) ---\n\n");
+    printf("--- SENARYO A: Gecerli Isaretci (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
     EGLint major, minor;
     eglInitialize(egl_dpy, &major, &minor);
 
+    // Gecerli bir degisken ve onun bellek adresi (&)
+    EGLint aktarilan_sayi = 0;
     EGLConfig dizi[10];
 
-    // EGL 1.0 Standartlarina gore pNumConfig parametresi ASLA NULL OLAMAZ!
-    // Kasten NULL gonderiyoruz.
-    EGLBoolean basari = eglGetConfigs(egl_dpy, dizi, 10, NULL);
-    EGLint hata_kodu = eglGetError();
+    // pNumConfig icin gecerli bir bellek adresi (&aktarilan_sayi) verdik
+    EGLBoolean basari = eglGetConfigs(egl_dpy, dizi, 10, &aktarilan_sayi);
 
-    if (basari == EGL_FALSE) {
+    if (basari == EGL_TRUE) {
         printf("=================================================================\n");
-        printf("HATA: pNumConfig parametresine NULL verdik!\n");
-        printf("eglGetConfigs fonksiyonu kural geregi coktu ve EGL_FALSE dondu.\n");
-        printf("Hata Kodu: 0x%X (EGL_BAD_PARAMETER)\n", hata_kodu);
-        printf("Gorsel Sonuc: Config dizisi dolmadigi icin hicbir pencere,\n");
-        printf("EGL surface veya cizim alani OLUSTURULAMAZ!\n");
+        printf("BASARILI: pNumConfig icin gecerli adres verildi.\n");
+        printf("EGL hem configleri verdi hem de kactane yazdigini soyledi: %d\n", aktarilan_sayi);
+        printf("Gorsel Sonuc: Her sey yolunda oldugu icin 3D sahne cizilebilir.\n");
         printf("=================================================================\n\n");
+
+        EGLConfig secilen_config = dizi[0];
+        eglBindAPI(EGL_OPENGL_ES_API);
+        EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+
+        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
+        EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
+
+        eglMakeCurrent(egl_dpy, surf, surf, ctx);
+
+        printf("Pencere acildi. Cikmak icin terminalde Ctrl+C yapin.\n");
+
+        while(1) {
+            glClearColor(0.5f, 0.2f, 0.5f, 1.0f); // Mor arka plan
+            glClear(GL_COLOR_BUFFER_BIT);
+            draw_triangle(0.0f, 0.0f, 1.0f, 1.0f); // Camgobegi ucgen
+            eglSwapBuffers(egl_dpy, surf);
+            usleep(16000);
+        }
     }
 
-    printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
-
-    eglTerminate(egl_dpy);
-    XCloseDisplay(x_dpy);
-    return -1;
+    cleanup_drm_and_gbm(&state);
+    return 0;
 }

@@ -7,7 +7,7 @@ int main(void) {
     printf("==================================================\n");
 
     AppState state;
-    if (!init_egl_and_x11(&state, 800, 600, "Senaryo A - Aktif Context")) {
+    if (!init_egl_and_drm(&state, 800, 600, "Senaryo A - Aktif Context")) {
         return -1;
     }
 

@@ -8,12 +8,12 @@ int main() {
     printf("=================================================================\n");
 
     NativeWindow nw;
-    if (!create_x11_window(&nw, 800, 600, "EGLTerminate - Senaryo C (Uninitialized Display)")) {
+    if (!create_drm_window(&nw, 800, 600, "EGLTerminate - Senaryo C (Uninitialized Display)")) {
         return -1;
     }
 
     // Gecerli bir EGL Display al
-    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)nw.x_display);
+    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)nw.gbm_device);
     if (display == EGL_NO_DISPLAY) {
         printf("Hata: EGL Display alinamadi.\n");
         return -1;
@@ -48,13 +48,13 @@ int main() {
         if (err == EGL_NOT_INITIALIZED) {
             printf("\nSONUC:\n");
             printf("Bu parametreyi (pDpyID) eglTerminate'e basariyla vermis olsak da, en basta eglInitialize ile baslatilmadigi icin (NOT_INITIALIZED) EGL Context oluşturulamadı ve ekrana HİÇBİR ŞEY ÇİZİLEMEDİ.\n");
-            printf("Gorsel Kanit: Ekranda sadece bos X11 penceresi kaldi (3 saniye sonra kapanacak).\n");
+            printf("Gorsel Kanit: Ekranda sadece bos DRM/KMS ekrani kaldi (3 saniye sonra kapanacak).\n");
         }
     }
 
     // Bos pencereyi gormek icin bekle
     sleep(3);
 
-    destroy_x11_window(&nw);
+    destroy_drm_window(&nw);
     return 0;
 }

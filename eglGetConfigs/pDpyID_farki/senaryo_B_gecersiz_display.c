@@ -3,8 +3,6 @@
 int main() {
     printf("--- SENARYO B: Gecersiz Display (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-
     // BILEREK GECERSIZ DISPLAY VERIYORUZ (EGL_NO_DISPLAY = 0)
     EGLDisplay hatali_dpy = EGL_NO_DISPLAY;
 
@@ -26,6 +24,5 @@ int main() {
 
     printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
 
-    XCloseDisplay(x_dpy);
     return -1;
 }

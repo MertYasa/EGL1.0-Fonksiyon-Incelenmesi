@@ -2,33 +2,128 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-bool create_x11_window(NativeWindow* nw, int width, int height, const char* title) {
-    nw->x_display = XOpenDisplay(NULL);
-    if (!nw->x_display) {
-        fprintf(stderr, "XOpenDisplay basarisiz. (DISPLAY ortami ayarli olmayabilir)\n");
+#include <fcntl.h>
+#include <unistd.h>
+
+static int get_drm_resources(NativeWindow* nw) {
+    drmModeRes *resources = drmModeGetResources(nw->drm_fd);
+    if (!resources) {
+        fprintf(stderr, "drmModeGetResources basarisiz.\n");
+        return -1;
+    }
+
+    drmModeConnector *connector = NULL;
+    for (int i = 0; i < resources->count_connectors; i++) {
+        connector = drmModeGetConnector(nw->drm_fd, resources->connectors[i]);
+        if (connector->connection == DRM_MODE_CONNECTED) {
+            break;
+        }
+        drmModeFreeConnector(connector);
+        connector = NULL;
+    }
+
+    if (!connector) {
+        fprintf(stderr, "Aktif DRM connector bulunamadi.\n");
+        drmModeFreeResources(resources);
+        return -1;
+    }
+
+    nw->connector_id = connector->connector_id;
+    nw->mode_info = connector->modes[0];
+
+    drmModeEncoder *encoder = NULL;
+    if (connector->encoder_id) {
+        encoder = drmModeGetEncoder(nw->drm_fd, connector->encoder_id);
+    }
+
+    if (encoder) {
+        nw->crtc_id = encoder->crtc_id;
+        drmModeFreeEncoder(encoder);
+    } else {
+        // Fallback: Just pick the first CRTC
+        nw->crtc_id = resources->crtcs[0];
+    }
+
+    drmModeFreeConnector(connector);
+    drmModeFreeResources(resources);
+    return 0;
+}
+
+bool create_drm_window(NativeWindow* nw, int width, int height, const char* title) {
+    // We try card0 or card1
+    nw->drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    if (nw->drm_fd < 0) {
+        nw->drm_fd = open("/dev/dri/card1", O_RDWR | O_CLOEXEC);
+    }
+
+    if (nw->drm_fd < 0) {
+        fprintf(stderr, "DRM cihazina erisilemedi (/dev/dri/card0 veya card1).\n");
         return false;
     }
 
-    int screen = DefaultScreen(nw->x_display);
-    Window root = RootWindow(nw->x_display, screen);
+    if (get_drm_resources(nw) < 0) {
+        close(nw->drm_fd);
+        return false;
+    }
 
-    nw->x_window = XCreateSimpleWindow(nw->x_display, root, 0, 0, width, height, 1,
-                                        BlackPixel(nw->x_display, screen),
-                                        WhitePixel(nw->x_display, screen));
+    // Use mode resolution instead of passed width/height if we want full screen KMS
+    nw->gbm_device = gbm_create_device(nw->drm_fd);
+    if (!nw->gbm_device) {
+        fprintf(stderr, "GBM cihazi olusturulamadi.\n");
+        close(nw->drm_fd);
+        return false;
+    }
 
-    XStoreName(nw->x_display, nw->x_window, title);
-    XMapWindow(nw->x_display, nw->x_window);
-    XFlush(nw->x_display);
+    nw->gbm_surface = gbm_surface_create(nw->gbm_device,
+                                         nw->mode_info.hdisplay,
+                                         nw->mode_info.vdisplay,
+                                         GBM_FORMAT_XRGB8888,
+                                         GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if (!nw->gbm_surface) {
+        fprintf(stderr, "GBM surface olusturulamadi.\n");
+        gbm_device_destroy(nw->gbm_device);
+        close(nw->drm_fd);
+        return false;
+    }
 
+    printf("DRM/KMS ve GBM cihazi basariyla olusturuldu: %s\n", title);
     return true;
 }
 
-void destroy_x11_window(NativeWindow* nw) {
-    if (nw->x_display) {
-        XDestroyWindow(nw->x_display, nw->x_window);
-        XCloseDisplay(nw->x_display);
-        nw->x_display = NULL;
+void destroy_drm_window(NativeWindow* nw) {
+    if (nw->gbm_surface) {
+        gbm_surface_destroy(nw->gbm_surface);
+        nw->gbm_surface = NULL;
     }
+    if (nw->gbm_device) {
+        gbm_device_destroy(nw->gbm_device);
+        nw->gbm_device = NULL;
+    }
+    if (nw->drm_fd >= 0) {
+        close(nw->drm_fd);
+        nw->drm_fd = -1;
+    }
+}
+
+void drm_swap_buffers(EGLDisplay dpy, EGLSurface sfc, NativeWindow* nw) {
+    eglSwapBuffers(dpy, sfc);
+
+    struct gbm_bo *bo = gbm_surface_lock_front_buffer(nw->gbm_surface);
+    if (!bo) {
+        return;
+    }
+
+    uint32_t handle = gbm_bo_get_handle(bo).u32;
+    uint32_t pitch = gbm_bo_get_stride(bo);
+    uint32_t fb_id;
+
+    if (drmModeAddFB(nw->drm_fd, nw->mode_info.hdisplay, nw->mode_info.vdisplay,
+                     24, 32, pitch, handle, &fb_id) == 0) {
+
+        drmModeSetCrtc(nw->drm_fd, nw->crtc_id, fb_id, 0, 0, &nw->connector_id, 1, &nw->mode_info);
+    }
+
+    gbm_surface_release_buffer(nw->gbm_surface, bo);
 }
 
 static GLuint compile_shader(GLenum type, const char* source) {

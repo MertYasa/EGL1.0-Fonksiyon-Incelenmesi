@@ -7,7 +7,7 @@ int main(void) {
     printf("==================================================\n");
 
     AppState state;
-    if (!init_egl_and_x11(&state, 800, 600, "Senaryo B - Hata Durumu (Bosanmis Context)")) {
+    if (!init_egl_and_drm(&state, 800, 600, "Senaryo B - Hata Durumu (Bosanmis Context)")) {
         return -1;
     }
 

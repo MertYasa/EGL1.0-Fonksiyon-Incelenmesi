@@ -1,27 +1,34 @@
 #include "../common/common_utils.h"
 
 int main() {
-    printf("--- SENARYO B: pNumConfig'e KASITLI OLARAK NULL Verilmesi ---\n\n");
+    printf("--- SENARYO B: pNumConfig NULL Verilmesi (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
-    eglInitialize(egl_dpy, NULL, NULL);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
+    EGLint major, minor;
+    eglInitialize(egl_dpy, &major, &minor);
 
-    // EGL Standardına göre pNumConfig ASLA NULL olamaz!
-    printf("eglGetConfigs(egl_dpy, NULL, 0, NULL) cagiriliyor...\n");
-    EGLBoolean result = eglGetConfigs(egl_dpy, NULL, 0, NULL);
+    EGLConfig dizi[10];
 
-    if (result == EGL_FALSE) {
-        EGLint error = eglGetError();
-        printf("[BEKLENEN HATA] EGL islem yapmayi reddetti.\n");
-        if (error == EGL_BAD_PARAMETER) {
-            printf("Hata Kodu: EGL_BAD_PARAMETER (0x%x) - pNumConfig NULL olamaz!\n", error);
-        } else {
-            printf("Hata Kodu: 0x%x\n", error);
-        }
+    // EGL 1.0 Standartlarina gore pNumConfig parametresi ASLA NULL OLAMAZ!
+    // Kasten NULL gonderiyoruz.
+    EGLBoolean basari = eglGetConfigs(egl_dpy, dizi, 10, NULL);
+    EGLint hata_kodu = eglGetError();
+
+    if (basari == EGL_FALSE) {
+        printf("=================================================================\n");
+        printf("HATA: pNumConfig parametresine NULL verdik!\n");
+        printf("eglGetConfigs fonksiyonu kural geregi coktu ve EGL_FALSE dondu.\n");
+        printf("Hata Kodu: 0x%X (EGL_BAD_PARAMETER)\n", hata_kodu);
+        printf("Gorsel Sonuc: Config dizisi dolmadigi icin hicbir pencere,\n");
+        printf("EGL surface veya cizim alani OLUSTURULAMAZ!\n");
+        printf("=================================================================\n\n");
     }
 
+    printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
+
     eglTerminate(egl_dpy);
-    XCloseDisplay(x_dpy);
-    return 0;
+    cleanup_drm_and_gbm(&state);
+    return -1;
 }

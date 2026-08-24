@@ -4,16 +4,18 @@ project(EGL1_0_Fonksiyon_Incelemesi C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Gerekli kütüphaneleri bul (Ubuntu'da libx11-dev, libegl1-mesa-dev, libgles2-mesa-dev paketleri gereklidir)
-find_package(X11 REQUIRED)
+# Gerekli kütüphaneleri bul (Ubuntu'da libdrm-dev, libgbm-dev, libegl1-mesa-dev, libgles2-mesa-dev paketleri gereklidir)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DRM REQUIRED libdrm)
+pkg_check_modules(GBM REQUIRED gbm)
 
 # Ortak kütüphane
 add_library(common_utils common/common_utils.c common/common_utils.h)
 target_include_directories(common_utils PUBLIC common)
-target_include_directories(common_utils PUBLIC ${X11_INCLUDE_DIR})
+target_include_directories(common_utils PUBLIC ${DRM_INCLUDE_DIRS} ${GBM_INCLUDE_DIRS})
 
 # Tüm senaryolara bağlanacak ortak link kütüphaneleri
-set(COMMON_LIBS common_utils ${X11_LIBRARIES} EGL GLESv2)
+set(COMMON_LIBS common_utils ${DRM_LIBRARIES} ${GBM_LIBRARIES} EGL GLESv2)
 
 # 1. Parametre: pDpyID
 add_executable(senaryo_A_ana_ekran pDpyID_farki/senaryo_A_ana_ekran.c)

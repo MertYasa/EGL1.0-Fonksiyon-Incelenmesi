@@ -3,13 +3,13 @@
 int main() {
     printf("--- SENARYO A: pDpyID - Kokpit Ana Ekrani (PFD) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    if (!x_dpy) {
-        printf("Hata: X11 Display acilamadi.\n");
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) acilamadi.\n");
         return 1;
     }
 
-    EGLDisplay main_display = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    EGLDisplay main_display = eglGetDisplay((EGLNativeDisplayType)native_ctx->gbm_dev);
     eglInitialize(main_display, NULL, NULL);
 
     EGLint attribs[] = { EGL_NONE };
@@ -29,6 +29,6 @@ int main() {
     }
 
     eglDestroyContext(main_display, main_ctx);
-    XCloseDisplay(x_dpy);
+    destroy_native_display(native_ctx);
     return 0;
 }

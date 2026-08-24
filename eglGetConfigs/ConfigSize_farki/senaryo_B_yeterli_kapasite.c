@@ -3,8 +3,9 @@
 int main() {
     printf("--- SENARYO B: Yeterli Kapasite Verilmesi (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
 
     EGLint major, minor;
     eglInitialize(egl_dpy, &major, &minor);
@@ -47,14 +48,14 @@ int main() {
         printf("=================================================================\n\n");
     } else {
         printf("HATA: Sisteminizde derinlik tamponu destekleyen config yok!\n");
+        cleanup_drm_and_gbm(&state);
         return -1;
     }
 
     eglBindAPI(EGL_OPENGL_ES_API);
     EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
-    Window win = create_x11_window(x_dpy, 400, 400, "Senaryo B: Kapasite Yeterli (Derinlik Var, Goruntu Dogru)");
-    EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, win, NULL);
+    EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
     EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
 
     eglMakeCurrent(egl_dpy, surf, surf, ctx);
@@ -78,5 +79,6 @@ int main() {
         usleep(16000); // ~60 FPS
     }
 
+    cleanup_drm_and_gbm(&state);
     return 0;
 }

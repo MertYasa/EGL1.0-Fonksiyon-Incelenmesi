@@ -3,8 +3,9 @@
 int main() {
     printf("--- SENARYO A: Sadece Sayim Yapma (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
     EGLint major, minor;
     eglInitialize(egl_dpy, &major, &minor);
 
@@ -25,6 +26,6 @@ int main() {
     printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
 
     eglTerminate(egl_dpy);
-    XCloseDisplay(x_dpy);
+    cleanup_drm_and_gbm(&state);
     return 0;
 }

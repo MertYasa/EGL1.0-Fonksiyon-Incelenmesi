@@ -3,8 +3,12 @@
 int main() {
     printf("--- SENARYO A: pAttribList - EGL 1.0 Standart Kullanimi ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) baslatilamadi.\n");
+        return -1;
+    }
+    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)native_ctx->gbm_dev);
     eglInitialize(display, NULL, NULL);
 
     EGLint attribs[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_NONE };
@@ -19,6 +23,12 @@ int main() {
     if (ctx_egl10 != EGL_NO_CONTEXT) {
         EGLint pbuffer_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
         EGLSurface pbuffer_surf = eglCreatePbufferSurface(display, config, pbuffer_attribs);
+        if (pbuffer_surf == EGL_NO_SURFACE) {
+            printf("Hata: EGL_NO_SURFACE (Pbuffer olusturulamadi).\n");
+            eglDestroyContext(display, ctx_egl10);
+            destroy_native_display(native_ctx);
+            return -1;
+        }
 
         eglMakeCurrent(display, pbuffer_surf, pbuffer_surf, ctx_egl10);
 
@@ -33,6 +43,6 @@ int main() {
     }
 
     eglDestroyContext(display, ctx_egl10);
-    XCloseDisplay(x_dpy);
+    destroy_native_display(native_ctx);
     return 0;
 }

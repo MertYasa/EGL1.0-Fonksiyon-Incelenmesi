@@ -1,17 +1,107 @@
 #include "common_utils.h"
 
-Window create_x11_window(Display* x_dpy, int width, int height, const char* title) {
-    int screen = DefaultScreen(x_dpy);
-    Window root = RootWindow(x_dpy, screen);
+NativeDisplayContext* init_native_display() {
+    NativeDisplayContext* ctx = (NativeDisplayContext*)malloc(sizeof(NativeDisplayContext));
+    if (!ctx) return NULL;
 
-    Window win = XCreateSimpleWindow(x_dpy, root, 0, 0, width, height, 0,
-                                     BlackPixel(x_dpy, screen), WhitePixel(x_dpy, screen));
+    ctx->fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    if (ctx->fd < 0) {
+        printf("Hata: /dev/dri/card0 acilamadi.\n");
+        free(ctx);
+        return NULL;
+    }
 
-    XStoreName(x_dpy, win, title);
-    XMapWindow(x_dpy, win);
-    XFlush(x_dpy);
+    drmModeRes *resources = drmModeGetResources(ctx->fd);
+    if (!resources) {
+        printf("Hata: DRM kaynaklari alinamadi.\n");
+        close(ctx->fd);
+        free(ctx);
+        return NULL;
+    }
 
-    return win;
+    drmModeConnector *connector = NULL;
+    for (int i = 0; i < resources->count_connectors; i++) {
+        connector = drmModeGetConnector(ctx->fd, resources->connectors[i]);
+        if (connector->connection == DRM_MODE_CONNECTED) {
+            break;
+        }
+        drmModeFreeConnector(connector);
+        connector = NULL;
+    }
+
+    if (!connector) {
+        printf("Hata: Bagli ekran (connector) bulunamadi.\n");
+        drmModeFreeResources(resources);
+        close(ctx->fd);
+        free(ctx);
+        return NULL;
+    }
+
+    ctx->connector_id = connector->connector_id;
+    ctx->mode_info = connector->modes[0];
+    ctx->crtc_id = resources->crtcs[0];
+
+    drmModeFreeConnector(connector);
+    drmModeFreeResources(resources);
+
+    ctx->gbm_dev = gbm_create_device(ctx->fd);
+    if (!ctx->gbm_dev) {
+        printf("Hata: GBM cihazi olusturulamadi.\n");
+        close(ctx->fd);
+        free(ctx);
+        return NULL;
+    }
+
+    return ctx;
+}
+
+struct gbm_surface* create_gbm_surface(struct gbm_device *gbm_dev, int width, int height) {
+    if (!gbm_dev) {
+        printf("Hata: GBM cihazi NULL, yuzey olusturulamadi.\n");
+        return NULL;
+    }
+    struct gbm_surface *surf = gbm_surface_create(gbm_dev, width, height, GBM_FORMAT_XRGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if (!surf) {
+        printf("Hata: gbm_surface_create basarisiz oldu.\n");
+    }
+    return surf;
+}
+
+void present_native_display(NativeDisplayContext* ctx, struct gbm_surface* surface) {
+    if (!ctx || !surface) {
+        printf("Hata: Gecersiz context veya surface (present_native_display).\n");
+        return;
+    }
+
+    struct gbm_bo *bo = gbm_surface_lock_front_buffer(surface);
+    if (!bo) {
+        printf("Hata: gbm_surface_lock_front_buffer basarisiz (EGL cizim yapamamis olabilir).\n");
+        return;
+    }
+
+    uint32_t width = gbm_bo_get_width(bo);
+    uint32_t height = gbm_bo_get_height(bo);
+    uint32_t stride = gbm_bo_get_stride(bo);
+    uint32_t handle = gbm_bo_get_handle(bo).u32;
+
+    uint32_t fb_id;
+    int ret = drmModeAddFB(ctx->fd, width, height, 24, 32, stride, handle, &fb_id);
+    if (ret) {
+        printf("Hata: FB olusturulamadi.\n");
+        gbm_surface_release_buffer(surface, bo);
+        return;
+    }
+
+    drmModeSetCrtc(ctx->fd, ctx->crtc_id, fb_id, 0, 0, &ctx->connector_id, 1, &ctx->mode_info);
+    gbm_surface_release_buffer(surface, bo);
+}
+
+void destroy_native_display(NativeDisplayContext* ctx) {
+    if (ctx) {
+        if (ctx->gbm_dev) gbm_device_destroy(ctx->gbm_dev);
+        if (ctx->fd >= 0) close(ctx->fd);
+        free(ctx);
+    }
 }
 
 static GLuint shader_program = 0;

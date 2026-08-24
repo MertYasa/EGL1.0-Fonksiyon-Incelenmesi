@@ -4,14 +4,15 @@ project(EGL1_0_GetConfigs_Incelemesi C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-find_package(X11 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DRM REQUIRED libdrm)
+pkg_check_modules(GBM REQUIRED gbm)
 
 # Ortak kütüphane
 add_library(common_utils common/common_utils.c common/common_utils.h)
-target_include_directories(common_utils PUBLIC common)
-target_include_directories(common_utils PUBLIC ${X11_INCLUDE_DIR})
+target_include_directories(common_utils PUBLIC common ${DRM_INCLUDE_DIRS} ${GBM_INCLUDE_DIRS})
 
-set(COMMON_LIBS common_utils ${X11_LIBRARIES} EGL GLESv2)
+set(COMMON_LIBS common_utils ${DRM_LIBRARIES} ${GBM_LIBRARIES} EGL GLESv2)
 
 # 1. Parametre: pDpyID
 add_executable(senaryo_A_gecerli_display pDpyID_farki/senaryo_A_gecerli_display.c)

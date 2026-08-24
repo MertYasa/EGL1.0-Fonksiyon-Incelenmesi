@@ -8,12 +8,12 @@ int main() {
     printf("=================================================================\n");
 
     NativeWindow nw;
-    if (!create_x11_window(&nw, 800, 600, "EGLTerminate - Senaryo A (Gecerli Display)")) {
+    if (!create_drm_window(&nw, 800, 600, "EGLTerminate - Senaryo A (Gecerli Display)")) {
         return -1;
     }
 
     // 1. Gecerli bir EGL Display al
-    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)nw.x_display);
+    EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)nw.gbm_device);
     if (display == EGL_NO_DISPLAY) {
         printf("Hata: EGL Display alinamadi.\n");
         return -1;
@@ -37,7 +37,7 @@ int main() {
     EGLint numConfigs;
     eglChooseConfig(display, attribList, &config, 1, &numConfigs);
 
-    EGLSurface surface = eglCreateWindowSurface(display, config, (EGLNativeWindowType)nw.x_window, NULL);
+    EGLSurface surface = eglCreateWindowSurface(display, config, (EGLNativeWindowType)nw.gbm_surface, NULL);
 
     EGLint contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
     EGLContext context = eglCreateContext(display, config, EGL_NO_CONTEXT, contextAttribs);
@@ -49,7 +49,7 @@ int main() {
     printf("-> Ekrana renkli bir ucgen ciziliyor...\n");
 
     draw_colorful_triangle();
-    eglSwapBuffers(display, surface);
+    drm_swap_buffers(display, surface, &nw);
 
     // Cizimi gorebilmek icin biraz bekle
     sleep(3);
@@ -65,6 +65,6 @@ int main() {
         printf("-> Hata: eglTerminate basarisiz oldu. Hata Kodu: %s\n", get_egl_error_str(eglGetError()));
     }
 
-    destroy_x11_window(&nw);
+    destroy_drm_window(&nw);
     return 0;
 }

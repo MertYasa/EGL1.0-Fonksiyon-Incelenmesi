@@ -3,8 +3,9 @@
 int main() {
     printf("--- PROFESYONEL 2 ADIMLI SORGU (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
     EGLint major, minor;
     eglInitialize(egl_dpy, &major, &minor);
 
@@ -16,6 +17,7 @@ int main() {
 
     if (toplam_config == 0) {
         printf("Sistem EGL desteklemiyor veya bosta.\n");
+        cleanup_drm_and_gbm(&state);
         return -1;
     }
 
@@ -50,8 +52,7 @@ int main() {
         eglBindAPI(EGL_OPENGL_ES_API);
         EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
-        Window win = create_x11_window(x_dpy, 400, 400, "Profesyonel Sorgu (Kusursuz Cizim)");
-        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, win, NULL);
+        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
         EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
 
         eglMakeCurrent(egl_dpy, surf, surf, ctx);
@@ -75,5 +76,6 @@ int main() {
         free(tum_configler);
     }
 
+    cleanup_drm_and_gbm(&state);
     return 0;
 }

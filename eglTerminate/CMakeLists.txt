@@ -6,9 +6,14 @@ set(CMAKE_C_STANDARD 99)
 # Include directories
 include_directories(common)
 
-# X11, EGL and GLESv2 libraries
-find_package(X11 REQUIRED)
-set(LIBS ${X11_LIBRARIES} EGL GLESv2)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(DRM REQUIRED libdrm)
+pkg_check_modules(GBM REQUIRED gbm)
+
+# DRM, GBM, EGL and GLESv2 libraries
+set(LIBS ${DRM_LIBRARIES} ${GBM_LIBRARIES} EGL GLESv2)
+include_directories(${DRM_INCLUDE_DIRS} ${GBM_INCLUDE_DIRS})
+link_directories(${DRM_LIBRARY_DIRS} ${GBM_LIBRARY_DIRS})
 
 # Common utilities
 add_library(common_utils common/common_utils.c)

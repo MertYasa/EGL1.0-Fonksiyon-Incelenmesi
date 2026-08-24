@@ -17,31 +17,31 @@ void sleep_ms(int ms) {
 #endif
 }
 
-bool init_egl_and_x11(AppState *state, int width, int height, const char* title) {
-    // 1. Initialize X11
-    state->x_display = XOpenDisplay(NULL);
-    if (state->x_display == NULL) {
-        fprintf(stderr, "Error: Cannot connect to X server\n");
+bool init_egl_and_drm(AppState *state, int width, int height, const char* title) {
+    // 1. Initialize DRM and GBM
+    state->drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    if (state->drm_fd < 0) {
+        fprintf(stderr, "Error: Cannot open /dev/dri/card0\n");
         return false;
     }
 
-    Window root = DefaultRootWindow(state->x_display);
-    XSetWindowAttributes swa;
-    swa.event_mask = ExposureMask | PointerMotionMask | KeyPressMask;
+    state->gbm_device = gbm_create_device(state->drm_fd);
+    if (!state->gbm_device) {
+        fprintf(stderr, "Error: Cannot create GBM device\n");
+        close(state->drm_fd);
+        return false;
+    }
 
-    state->x_window = XCreateWindow(
-        state->x_display, root,
-        0, 0, width, height, 0,
-        CopyFromParent, InputOutput,
-        CopyFromParent, CWEventMask,
-        &swa);
-
-    XStoreName(state->x_display, state->x_window, title);
-    XMapWindow(state->x_display, state->x_window);
-    XFlush(state->x_display);
+    state->gbm_surface = gbm_surface_create(state->gbm_device, width, height, GBM_FORMAT_XRGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if (!state->gbm_surface) {
+        fprintf(stderr, "Error: Cannot create GBM surface\n");
+        gbm_device_destroy(state->gbm_device);
+        close(state->drm_fd);
+        return false;
+    }
 
     // 2. Initialize EGL
-    state->egl_display = eglGetDisplay((EGLNativeDisplayType)state->x_display);
+    state->egl_display = eglGetDisplay((EGLNativeDisplayType)state->gbm_device);
     if (state->egl_display == EGL_NO_DISPLAY) {
         fprintf(stderr, "Error: eglGetDisplay failed\n");
         return false;
@@ -62,14 +62,34 @@ bool init_egl_and_x11(AppState *state, int width, int height, const char* title)
         EGL_NONE
     };
 
-    EGLConfig config;
+    EGLConfig config = NULL;
     EGLint num_configs;
-    if (!eglChooseConfig(state->egl_display, attribs, &config, 1, &num_configs) || num_configs == 0) {
-        fprintf(stderr, "Error: eglChooseConfig failed\n");
+    eglChooseConfig(state->egl_display, attribs, NULL, 0, &num_configs);
+    if (num_configs == 0) {
+        fprintf(stderr, "Error: No matching EGL configs found\n");
         return false;
     }
 
-    state->egl_surface = eglCreateWindowSurface(state->egl_display, config, (EGLNativeWindowType)state->x_window, NULL);
+    EGLConfig *configs = malloc(num_configs * sizeof(EGLConfig));
+    eglChooseConfig(state->egl_display, attribs, configs, num_configs, &num_configs);
+
+    for (int i = 0; i < num_configs; i++) {
+        EGLint visual_id;
+        if (eglGetConfigAttrib(state->egl_display, configs[i], EGL_NATIVE_VISUAL_ID, &visual_id)) {
+            if (visual_id == GBM_FORMAT_XRGB8888) {
+                config = configs[i];
+                break;
+            }
+        }
+    }
+    free(configs);
+
+    if (config == NULL) {
+        fprintf(stderr, "Error: Could not find EGL config matching GBM_FORMAT_XRGB8888\n");
+        return false;
+    }
+
+    state->egl_surface = eglCreateWindowSurface(state->egl_display, config, (EGLNativeWindowType)state->gbm_surface, NULL);
     if (state->egl_surface == EGL_NO_SURFACE) {
         fprintf(stderr, "Error: eglCreateWindowSurface failed\n");
         return false;
@@ -95,9 +115,15 @@ void cleanup(AppState *state) {
         if (state->egl_surface != EGL_NO_SURFACE) eglDestroySurface(state->egl_display, state->egl_surface);
         eglTerminate(state->egl_display);
     }
-    if (state->x_display != NULL) {
-        if (state->x_window != 0) XDestroyWindow(state->x_display, state->x_window);
-        XCloseDisplay(state->x_display);
+
+    if (state->gbm_surface) {
+        gbm_surface_destroy(state->gbm_surface);
+    }
+    if (state->gbm_device) {
+        gbm_device_destroy(state->gbm_device);
+    }
+    if (state->drm_fd >= 0) {
+        close(state->drm_fd);
     }
 }
 

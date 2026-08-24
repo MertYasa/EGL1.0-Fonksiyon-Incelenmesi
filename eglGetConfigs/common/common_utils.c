@@ -1,17 +1,39 @@
 #include "common_utils.h"
 
-Window create_x11_window(Display* x_dpy, int width, int height, const char* title) {
-    int screen = DefaultScreen(x_dpy);
-    Window root = RootWindow(x_dpy, screen);
+bool init_drm_and_gbm(AppState *state, int width, int height) {
+    state->drm_fd = open("/dev/dri/card0", O_RDWR | O_CLOEXEC);
+    if (state->drm_fd < 0) {
+        fprintf(stderr, "Error: Cannot open /dev/dri/card0\n");
+        return false;
+    }
 
-    Window win = XCreateSimpleWindow(x_dpy, root, 0, 0, width, height, 0,
-                                     BlackPixel(x_dpy, screen), WhitePixel(x_dpy, screen));
+    state->gbm_device = gbm_create_device(state->drm_fd);
+    if (!state->gbm_device) {
+        fprintf(stderr, "Error: Cannot create GBM device\n");
+        close(state->drm_fd);
+        return false;
+    }
 
-    XStoreName(x_dpy, win, title);
-    XMapWindow(x_dpy, win);
-    XFlush(x_dpy);
+    state->gbm_surface = gbm_surface_create(state->gbm_device, width, height, GBM_FORMAT_XRGB8888, GBM_BO_USE_SCANOUT | GBM_BO_USE_RENDERING);
+    if (!state->gbm_surface) {
+        fprintf(stderr, "Error: Cannot create GBM surface\n");
+        gbm_device_destroy(state->gbm_device);
+        close(state->drm_fd);
+        return false;
+    }
+    return true;
+}
 
-    return win;
+void cleanup_drm_and_gbm(AppState *state) {
+    if (state->gbm_surface) {
+        gbm_surface_destroy(state->gbm_surface);
+    }
+    if (state->gbm_device) {
+        gbm_device_destroy(state->gbm_device);
+    }
+    if (state->drm_fd >= 0) {
+        close(state->drm_fd);
+    }
 }
 
 static GLuint shader_program = 0;

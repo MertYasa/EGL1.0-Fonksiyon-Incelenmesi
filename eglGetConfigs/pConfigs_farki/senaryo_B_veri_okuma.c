@@ -3,8 +3,9 @@
 int main() {
     printf("--- SENARYO B: Veri Okuma (Gorsel Sonuclu) ---\n\n");
 
-    Display* x_dpy = XOpenDisplay(NULL);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)x_dpy);
+    AppState state;
+    init_drm_and_gbm(&state, 400, 400);
+    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
     EGLint major, minor;
     eglInitialize(egl_dpy, &major, &minor);
 
@@ -26,8 +27,7 @@ int main() {
         eglBindAPI(EGL_OPENGL_ES_API);
         EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
-        Window win = create_x11_window(x_dpy, 400, 400, "Senaryo B: Veri Okuma (Basarili)");
-        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, win, NULL);
+        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
         EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
 
         eglMakeCurrent(egl_dpy, surf, surf, ctx);
@@ -43,5 +43,6 @@ int main() {
         }
     }
 
+    cleanup_drm_and_gbm(&state);
     return 0;
 }
