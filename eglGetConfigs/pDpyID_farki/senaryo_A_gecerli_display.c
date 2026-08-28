@@ -1,50 +1,134 @@
 #include "../common/common_utils.h"
 
-int main() {
-    printf("--- SENARYO A: Gecerli Display (Gorsel Sonuclu) ---\n\n");
+static int config_gorsel_icin_uygun(EGLDisplay dpy, EGLConfig config) {
+    EGLint surface_type = 0;
+    EGLint renderable_type = 0;
+    return eglGetConfigAttrib(dpy, config, EGL_SURFACE_TYPE, &surface_type) &&
+           eglGetConfigAttrib(dpy, config, EGL_RENDERABLE_TYPE, &renderable_type) &&
+           (surface_type & EGL_WINDOW_BIT) &&
+           (renderable_type & EGL_OPENGL_ES2_BIT);
+}
 
-    AppState state;
-    init_drm_and_gbm(&state, 400, 400);
-    // GECERLI (DOGRU) EGL DISPLAY ALINIYOR
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
+int main(void) {
+    printf("--- SENARYO A: pDpyID - Gecerli Display ---\n\n");
 
-    EGLint major, minor;
-    eglInitialize(egl_dpy, &major, &minor);
-
-    EGLint aktarilan_sayi = 0;
-    EGLConfig dizi[10];
-
-    // Gecerli display verildigi icin fonksiyon BASARILI olacak
-    EGLBoolean basari = eglGetConfigs(egl_dpy, dizi, 10, &aktarilan_sayi);
-
-    if (basari == EGL_TRUE && aktarilan_sayi > 0) {
-        printf("=================================================================\n");
-        printf("BASARILI: Gecerli EGLDisplay verildigi icin configler okunabildi.\n");
-        printf("Gorsel Sonuc: Pencere basariyla acilacak ve cizim yapilacaktir.\n");
-        printf("=================================================================\n\n");
-
-        EGLConfig secilen_config = dizi[0];
-        eglBindAPI(EGL_OPENGL_ES_API);
-        EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
-
-        EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
-        EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
-
-        eglMakeCurrent(egl_dpy, surf, surf, ctx);
-
-        printf("Pencere acildi. Cikmak icin terminalde Ctrl+C yapin.\n");
-
-        while(1) {
-            glClearColor(0.2f, 0.5f, 0.2f, 1.0f); // Yesil arka plan
-            glClear(GL_COLOR_BUFFER_BIT);
-            draw_triangle(0.0f, 1.0f, 1.0f, 1.0f); // Beyaz ucgen
-            eglSwapBuffers(egl_dpy, surf);
-            usleep(16000);
-        }
-    } else {
-        printf("HATA: Bilinmeyen bir sorun olustu.\n");
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) acilamadi.\n");
+        return 1;
     }
 
-    cleanup_drm_and_gbm(&state);
+    EGLDisplay egl_dpy = get_egl_display_for_gbm(native_ctx->gbm_dev);
+    if (egl_dpy == EGL_NO_DISPLAY || !eglInitialize(egl_dpy, NULL, NULL)) {
+        log_egl_error("eglInitialize");
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    EGLConfig configs[64];
+    EGLint aktarilan_sayi = 0;
+    if (!eglGetConfigs(egl_dpy, configs, 64, &aktarilan_sayi)) {
+        log_egl_error("eglGetConfigs");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    if (aktarilan_sayi <= 0) {
+        printf("Hata: Bu EGLDisplay icin hic EGLConfig yok; surface/context olusturulamaz.\n");
+        printf("GORSEL SONUC: Config olmadigi icin cizim kurulmadan program temiz kapaniyor.\n");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 0;
+    }
+
+    EGLConfig secilen_config = NULL;
+    for (int i = 0; i < aktarilan_sayi; i++) {
+        if (config_gorsel_icin_uygun(egl_dpy, configs[i])) {
+            secilen_config = configs[i];
+            break;
+        }
+    }
+
+    if (!secilen_config) {
+        printf("Hata: Gorsel cikti icin EGL_WINDOW_BIT ve EGL_OPENGL_ES2_BIT destekli config bulunamadi.\n");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        log_egl_error("eglBindAPI");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    struct gbm_surface *win = create_egl_compatible_gbm_surface(egl_dpy,
+                                                                secilen_config,
+                                                                native_ctx->gbm_dev,
+                                                                native_ctx->mode_info.hdisplay,
+                                                                native_ctx->mode_info.vdisplay);
+    if (!win) {
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    EGLSurface surface = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)win, NULL);
+    if (surface == EGL_NO_SURFACE) {
+        log_egl_error("eglCreateWindowSurface");
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
+    EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
+    if (ctx == EGL_NO_CONTEXT) {
+        log_egl_error("eglCreateContext");
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    if (!eglMakeCurrent(egl_dpy, surface, surface, ctx)) {
+        log_egl_error("eglMakeCurrent");
+        eglDestroyContext(egl_dpy, ctx);
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    glViewport(0, 0, native_ctx->mode_info.hdisplay, native_ctx->mode_info.vdisplay);
+    glClearColor(0.05f, 0.18f, 0.12f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+    reset_common_gl_objects();
+    draw_triangle(0.0f, 1.0f, 1.0f, 1.0f);
+
+    printf("BASARILI: Gecerli EGLDisplay ile eglGetConfigs %d config dondurdu.\n", aktarilan_sayi);
+    printf("GORSEL SONUC: Secilen uygun config ile yesil zemin uzerine beyaz ucgen cizildi.\n");
+
+    if (!swap_and_present_native_display(egl_dpy, surface, native_ctx, win, 5)) {
+        eglMakeCurrent(egl_dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroyContext(egl_dpy, ctx);
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    eglMakeCurrent(egl_dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext(egl_dpy, ctx);
+    eglDestroySurface(egl_dpy, surface);
+    gbm_surface_destroy(win);
+    eglTerminate(egl_dpy);
+    destroy_native_display(native_ctx);
     return 0;
 }

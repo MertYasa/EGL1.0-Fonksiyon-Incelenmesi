@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/scenario_a.dir/void_param/scenario_a.c.o -o scenario_a  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

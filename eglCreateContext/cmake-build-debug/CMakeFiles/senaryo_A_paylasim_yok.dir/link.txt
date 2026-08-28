@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_A_paylasim_yok.dir/uShareContext_farki/senaryo_A_paylasim_yok.c.o -o senaryo_A_paylasim_yok  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

@@ -8,41 +8,88 @@ int main() {
         printf("Hata: Native Display (DRM/GBM) baslatilamadi.\n");
         return -1;
     }
+
     EGLDisplay display = eglGetDisplay((EGLNativeDisplayType)native_ctx->gbm_dev);
-    eglInitialize(display, NULL, NULL);
-
-    EGLint attribs[] = { EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_NONE };
-    EGLConfig config;
-    EGLint num_config;
-    eglChooseConfig(display, attribs, &config, 1, &num_config);
-
-    // EGL 1.0'da zorunlu olduğu gibi { EGL_NONE } veya NULL veriyoruz.
-    EGLint egl10_attribs[] = { EGL_NONE };
-    EGLContext ctx_egl10 = eglCreateContext(display, config, EGL_NO_CONTEXT, egl10_attribs);
-
-    if (ctx_egl10 != EGL_NO_CONTEXT) {
-        EGLint pbuffer_attribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
-        EGLSurface pbuffer_surf = eglCreatePbufferSurface(display, config, pbuffer_attribs);
-        if (pbuffer_surf == EGL_NO_SURFACE) {
-            printf("Hata: EGL_NO_SURFACE (Pbuffer olusturulamadi).\n");
-            eglDestroyContext(display, ctx_egl10);
-            destroy_native_display(native_ctx);
-            return -1;
-        }
-
-        eglMakeCurrent(display, pbuffer_surf, pbuffer_surf, ctx_egl10);
-
-        const GLubyte* version = glGetString(GL_VERSION);
-
-        printf("DEGER: pAttribList = { EGL_NONE }\n");
-        printf(" -> SONUC: Sabit (Fixed-Function) boru hattina (Orn: GLES 1.x) girilir.\n");
-        printf("    Aktif OpenGL ES Versiyonu: %s\n", version ? (const char*)version : "Bilinmiyor");
-        printf("    (Gorsel ekrana gerek yok, versiyon kontrolu ile pAttribList'in etkisi goruldu)\n\n");
-
-        eglDestroySurface(display, pbuffer_surf);
+    if (display == EGL_NO_DISPLAY || !eglInitialize(display, NULL, NULL)) {
+        log_egl_error("eglInitialize");
+        destroy_native_display(native_ctx);
+        return -1;
     }
 
+    EGLint attribs[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_NONE
+    };
+    EGLConfig config;
+    EGLint num_config = 0;
+    if (!eglChooseConfig(display, attribs, &config, 1, &num_config) || num_config == 0) {
+        log_egl_error("eglChooseConfig");
+        eglTerminate(display);
+        destroy_native_display(native_ctx);
+        return -1;
+    }
+
+    EGLint egl10_attribs[] = { EGL_NONE };
+    EGLContext ctx_egl10 = eglCreateContext(display, config, EGL_NO_CONTEXT, egl10_attribs);
+    if (ctx_egl10 == EGL_NO_CONTEXT) {
+        log_egl_error("eglCreateContext");
+        eglTerminate(display);
+        destroy_native_display(native_ctx);
+        return -1;
+    }
+
+    struct gbm_surface *win = create_egl_compatible_gbm_surface(display,
+                                                                config,
+                                                                native_ctx->gbm_dev,
+                                                                native_ctx->mode_info.hdisplay,
+                                                                native_ctx->mode_info.vdisplay);
+    if (!win) {
+        eglDestroyContext(display, ctx_egl10);
+        eglTerminate(display);
+        destroy_native_display(native_ctx);
+        return -1;
+    }
+
+    EGLSurface surface = eglCreateWindowSurface(display, config, (EGLNativeWindowType)win, NULL);
+    if (surface == EGL_NO_SURFACE) {
+        log_egl_error("eglCreateWindowSurface");
+        eglDestroyContext(display, ctx_egl10);
+        gbm_surface_destroy(win);
+        eglTerminate(display);
+        destroy_native_display(native_ctx);
+        return -1;
+    }
+
+    if (!eglMakeCurrent(display, surface, surface, ctx_egl10)) {
+        log_egl_error("eglMakeCurrent");
+        eglDestroySurface(display, surface);
+        eglDestroyContext(display, ctx_egl10);
+        gbm_surface_destroy(win);
+        eglTerminate(display);
+        destroy_native_display(native_ctx);
+        return -1;
+    }
+
+    const GLubyte* version = glGetString(GL_VERSION);
+    glViewport(0, 0, native_ctx->mode_info.hdisplay, native_ctx->mode_info.vdisplay);
+    glClearColor(0.18f, 0.18f, 0.18f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    printf("DEGER A: pAttribList = { EGL_NONE }\n");
+    printf(" -> SONUC: EGL 1.0 standart bicimde ek client-version istegi vermeden context olusturur.\n");
+    printf(" -> GORSEL SONUC: Duz gri ekran. Shader/modern pipeline talebi yapilmadi.\n");
+    printf("    Aktif OpenGL ES versiyonu: %s\n\n", version ? (const char*)version : "Bilinmiyor");
+
+    eglSwapBuffers(display, surface);
+    present_native_display_for(native_ctx, win, 5);
+
+    eglDestroySurface(display, surface);
     eglDestroyContext(display, ctx_egl10);
+    gbm_surface_destroy(win);
+    eglTerminate(display);
     destroy_native_display(native_ctx);
     return 0;
 }

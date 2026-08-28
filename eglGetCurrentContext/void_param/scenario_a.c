@@ -12,10 +12,11 @@ int main(void) {
     }
 
     // Context'i aktif hale getir (Make current)
-    if (!eglMakeCurrent(state.egl_display, state.egl_surface, state.egl_surface, state.egl_context)) {
-        printf("Hata: eglMakeCurrent basarisiz oldu.\n");
+    if (!make_current_checked(&state, state.egl_surface, state.egl_surface, state.egl_context,
+                              "Context aktif edilemedi; senaryo temiz kapatiliyor.")) {
+        cleanup(&state);
         return -1;
-    }
+                              }
 
     printf("1. eglMakeCurrent basariyla cagirildi ve context aktif edildi.\n");
 
@@ -40,7 +41,10 @@ int main(void) {
 
     draw_triangle();
 
-    eglSwapBuffers(state.egl_display, state.egl_surface);
+    if (!swap_buffers_checked(&state)) {
+        cleanup(&state);
+        return -1;
+    }
 
     printf("4. Cizim tamamlandi, pencere 3 saniye acik kalacak.\n");
     sleep_ms(3000);

@@ -1,28 +1,22 @@
 #include "../common/common_utils.h"
 
-int main() {
-    printf("--- SENARYO B: Gecersiz Display (Gorsel Sonuclu) ---\n\n");
+int main(void) {
+    printf("--- SENARYO B: pDpyID - Gecersiz Display ---\n\n");
 
-    // BILEREK GECERSIZ DISPLAY VERIYORUZ (EGL_NO_DISPLAY = 0)
     EGLDisplay hatali_dpy = EGL_NO_DISPLAY;
-
     EGLint aktarilan_sayi = 0;
-    EGLConfig dizi[10];
+    EGLConfig configs[10];
 
-    // Gecersiz display ile cagirildiginda ne olacak?
-    EGLBoolean basari = eglGetConfigs(hatali_dpy, dizi, 10, &aktarilan_sayi);
-    EGLint hata_kodu = eglGetError();
+    EGLBoolean basari = eglGetConfigs(hatali_dpy, configs, 10, &aktarilan_sayi);
 
     if (basari == EGL_FALSE) {
-        printf("=================================================================\n");
-        printf("HATA: EGL_NO_DISPLAY (Gecersiz Display) verildigi icin \n");
-        printf("eglGetConfigs EGL_FALSE dondu! Hata Kodu: 0x%X (EGL_BAD_DISPLAY)\n", hata_kodu);
-        printf("Gorsel Sonuc: Config listesi okunamadigi icin EGLContext ve \n");
-        printf("EGLSurface OLUSTURULAMAZ. Ekrana HICBIR SEY CIZILEMEZ!\n");
-        printf("=================================================================\n\n");
+        EGLint hata_kodu = eglGetError();
+        printf("BEKLENEN HATA: EGL_NO_DISPLAY ile eglGetConfigs basarisiz oldu.\n");
+        printf("EGL hata kodu: %s (0x%04x)\n", egl_error_name(hata_kodu), hata_kodu);
+        printf("GORSEL SONUC: Config alinmadigi icin context/surface olusturulmaz ve cizim yapilmaz.\n");
+        return 0;
     }
 
-    printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
-
-    return -1;
+    printf("Hata: Gecersiz display beklenmedik sekilde kabul edildi. Aktarilan config sayisi: %d\n", aktarilan_sayi);
+    return 1;
 }

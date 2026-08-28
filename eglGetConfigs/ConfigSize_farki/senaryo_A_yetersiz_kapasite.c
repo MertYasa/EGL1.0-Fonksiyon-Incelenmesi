@@ -1,78 +1,173 @@
 #include "../common/common_utils.h"
 
-int main() {
-    printf("--- SENARYO A: Yetersiz Kapasite Verilmesi (Gorsel Sonuclu) ---\n\n");
+static int config_gorsel_icin_uygun(EGLDisplay dpy, EGLConfig config) {
+    EGLint surface_type = 0;
+    EGLint renderable_type = 0;
+    return eglGetConfigAttrib(dpy, config, EGL_SURFACE_TYPE, &surface_type) &&
+           eglGetConfigAttrib(dpy, config, EGL_RENDERABLE_TYPE, &renderable_type) &&
+           (surface_type & EGL_WINDOW_BIT) &&
+           (renderable_type & EGL_OPENGL_ES2_BIT);
+}
 
-    AppState state;
-    init_drm_and_gbm(&state, 400, 400);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
+static int config_derinlikli(EGLDisplay dpy, EGLConfig config) {
+    EGLint depth = 0;
+    return eglGetConfigAttrib(dpy, config, EGL_DEPTH_SIZE, &depth) && depth >= 16;
+}
 
-    EGLint major, minor;
-    eglInitialize(egl_dpy, &major, &minor);
+int main(void) {
+    printf("--- SENARYO A: ConfigSize - Yetersiz Kapasite ---\n\n");
+
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) acilamadi.\n");
+        return 1;
+    }
+
+    EGLDisplay egl_dpy = get_egl_display_for_gbm(native_ctx->gbm_dev);
+    if (egl_dpy == EGL_NO_DISPLAY || !eglInitialize(egl_dpy, NULL, NULL)) {
+        log_egl_error("eglInitialize");
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
     EGLint toplam_gercek_sayi = 0;
-    eglGetConfigs(egl_dpy, NULL, 0, &toplam_gercek_sayi);
-    printf("Sistemde normalde %d adet konfigürasyon var.\n\n", toplam_gercek_sayi);
+    if (!eglGetConfigs(egl_dpy, NULL, 0, &toplam_gercek_sayi)) {
+        log_egl_error("eglGetConfigs sayim");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
+    if (toplam_gercek_sayi <= 0) {
+        printf("Sistemde toplam %d config var.\n", toplam_gercek_sayi);
+        printf("GORSEL SONUC: Config olmadigi icin EGL surface/context kurulamaz; program temiz kapaniyor.\n");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 0;
+    }
+
+    EGLConfig configs[2];
     EGLint aktarilan_sayi = 0;
-    EGLConfig dizi[2];
+    if (!eglGetConfigs(egl_dpy, configs, 2, &aktarilan_sayi)) {
+        log_egl_error("eglGetConfigs sinirli okuma");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
-    // Sistemde çok olmasına rağmen biz ConfigSize = 2 diyoruz
-    eglGetConfigs(egl_dpy, dizi, 2, &aktarilan_sayi);
-    printf("ConfigSize = 2 olarak belirtildigi icin EGL sadece %d adet veriyi kopyaladi.\n\n", aktarilan_sayi);
+    if (aktarilan_sayi <= 0) {
+        printf("Sistemde toplam %d config var, fakat sinirli okumada config gelmedi.\n", toplam_gercek_sayi);
+        printf("GORSEL SONUC: EGLConfig handle olmadigi icin cizim kurulmadan program temiz kapaniyor.\n");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 0;
+    }
 
-    // Bize verilen bu 2 config icinden Derinlik Tamponu (Z-Buffer) destegi olan bir tane arayalim
-    EGLConfig secilen_config = dizi[0]; // Varsayilan olarak ilkini (muhtemelen derinlik desteksiz) alalim
+    EGLConfig secilen_config = NULL;
     int derinlik_bulundu = 0;
-
-    for(int i = 0; i < aktarilan_sayi; i++) {
-        EGLint depth;
-        eglGetConfigAttrib(egl_dpy, dizi[i], EGL_DEPTH_SIZE, &depth);
-        if(depth >= 16) {
-            secilen_config = dizi[i];
-            derinlik_bulundu = 1;
-            break;
+    for (int i = 0; i < aktarilan_sayi; i++) {
+        if (config_gorsel_icin_uygun(egl_dpy, configs[i])) {
+            secilen_config = configs[i];
+            derinlik_bulundu = config_derinlikli(egl_dpy, configs[i]);
+            if (derinlik_bulundu) {
+                break;
+            }
         }
     }
 
-    if(!derinlik_bulundu) {
-        printf("=================================================================\n");
-        printf("UYARI: Sadece 2 konfigurasyon okuyabildigimiz icin aralarinda\n");
-        printf("Derinlik Tamponu (Z-Buffer) olan bir config BULAMADIK!\n");
-        printf("Z-Buffer olmadigi icin 3 Boyut derinlik testi calismayacak.\n");
-        printf("Gorsel Sonuc: Arkada (Z=0.5) olmasi gereken kirmizi ucgen, \n");
-        printf("ondeki (Z=0.0) yesil ucgenin ustune binecektir (HATALI GORUNTU).\n");
-        printf("=================================================================\n\n");
+    printf("Sistemde toplam %d config var, fakat ConfigSize=2 oldugu icin sadece %d tanesi okundu.\n",
+           toplam_gercek_sayi,
+           aktarilan_sayi);
+
+    if (!secilen_config) {
+        printf("UYARI: Sinirli havuzdaki configler gorsel cikti icin uygun degil.\n");
+        printf("GORSEL SONUC: Guvensiz context/surface denemesi yapilmadan program temiz kapaniyor.\n");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 0;
     }
 
-    eglBindAPI(EGL_OPENGL_ES_API);
+    if (!eglBindAPI(EGL_OPENGL_ES_API)) {
+        log_egl_error("eglBindAPI");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    struct gbm_surface *win = create_egl_compatible_gbm_surface(egl_dpy,
+                                                                secilen_config,
+                                                                native_ctx->gbm_dev,
+                                                                native_ctx->mode_info.hdisplay,
+                                                                native_ctx->mode_info.vdisplay);
+    if (!win) {
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    EGLSurface surface = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)win, NULL);
+    if (surface == EGL_NO_SURFACE) {
+        log_egl_error("eglCreateWindowSurface");
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
     EGLint ctx_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
-
-    EGLSurface surf = eglCreateWindowSurface(egl_dpy, secilen_config, (EGLNativeWindowType)state.gbm_surface, NULL);
     EGLContext ctx = eglCreateContext(egl_dpy, secilen_config, EGL_NO_CONTEXT, ctx_attribs);
+    if (ctx == EGL_NO_CONTEXT) {
+        log_egl_error("eglCreateContext");
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
-    eglMakeCurrent(egl_dpy, surf, surf, ctx);
+    if (!eglMakeCurrent(egl_dpy, surface, surface, ctx)) {
+        log_egl_error("eglMakeCurrent");
+        eglDestroyContext(egl_dpy, ctx);
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
-    printf("Pencere acildi. Cikmak icin terminalde Ctrl+C yapin.\n");
-
-    while(1) {
+    glViewport(0, 0, native_ctx->mode_info.hdisplay, native_ctx->mode_info.vdisplay);
+    if (derinlik_bulundu) {
         glEnable(GL_DEPTH_TEST);
         glDepthFunc(GL_LESS);
+    }
+    glClearColor(0.18f, 0.18f, 0.18f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    reset_common_gl_objects();
+    draw_triangle(0.5f, 1.0f, 0.0f, 0.0f);
+    draw_triangle(0.0f, 0.0f, 1.0f, 0.0f);
 
-        glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    if (derinlik_bulundu) {
+        printf("UYARI: Ilk 2 config icinde bu sistemde sans eseri derinlikli uygun config bulundu.\n");
+    } else {
+        printf("UYARI: Ilk 2 config icinde derinlik tamponu bulunamadi; 3B derinlik testi guvenilir degil.\n");
+    }
+    printf("GORSEL SONUC: Sadece sinirli havuz kullanildigi icin dogru config secimi garanti edilmez.\n");
 
-        // Z=0.0 (Yakin) olan Yesil Ucgen Cizimi
-        draw_triangle(0.0f, 0.0f, 1.0f, 0.0f);
-
-        // Z=0.5 (Uzak) olan Kirmizi Ucgen Cizimi (Ters cizelim ki ust uste gelsinler)
-        // Common utils'teki cizimi kullanacagiz ama o ayni sekli ciziyor. Z degerleri farkli oldugundan yeterli.
-        draw_triangle(0.5f, 1.0f, 0.0f, 0.0f);
-
-        eglSwapBuffers(egl_dpy, surf);
-        usleep(16000); // ~60 FPS
+    if (!swap_and_present_native_display(egl_dpy, surface, native_ctx, win, 5)) {
+        eglMakeCurrent(egl_dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglDestroyContext(egl_dpy, ctx);
+        eglDestroySurface(egl_dpy, surface);
+        gbm_surface_destroy(win);
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
     }
 
-    cleanup_drm_and_gbm(&state);
+    eglMakeCurrent(egl_dpy, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    eglDestroyContext(egl_dpy, ctx);
+    eglDestroySurface(egl_dpy, surface);
+    gbm_surface_destroy(win);
+    eglTerminate(egl_dpy);
+    destroy_native_display(native_ctx);
     return 0;
 }

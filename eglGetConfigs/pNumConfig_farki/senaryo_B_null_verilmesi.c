@@ -1,34 +1,28 @@
 #include "../common/common_utils.h"
 
-int main() {
-    printf("--- SENARYO B: pNumConfig NULL Verilmesi (Gorsel Sonuclu) ---\n\n");
+int main(void) {
+    printf("--- SENARYO B: pNumConfig - NULL Verilmesi ---\n\n");
 
-    AppState state;
-    init_drm_and_gbm(&state, 400, 400);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
-    EGLint major, minor;
-    eglInitialize(egl_dpy, &major, &minor);
-
-    EGLConfig dizi[10];
-
-    // EGL 1.0 Standartlarina gore pNumConfig parametresi ASLA NULL OLAMAZ!
-    // Kasten NULL gonderiyoruz.
-    EGLBoolean basari = eglGetConfigs(egl_dpy, dizi, 10, NULL);
-    EGLint hata_kodu = eglGetError();
-
-    if (basari == EGL_FALSE) {
-        printf("=================================================================\n");
-        printf("HATA: pNumConfig parametresine NULL verdik!\n");
-        printf("eglGetConfigs fonksiyonu kural geregi coktu ve EGL_FALSE dondu.\n");
-        printf("Hata Kodu: 0x%X (EGL_BAD_PARAMETER)\n", hata_kodu);
-        printf("Gorsel Sonuc: Config dizisi dolmadigi icin hicbir pencere,\n");
-        printf("EGL surface veya cizim alani OLUSTURULAMAZ!\n");
-        printf("=================================================================\n\n");
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) acilamadi.\n");
+        return 1;
     }
 
-    printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
+    EGLDisplay egl_dpy = get_egl_display_for_gbm(native_ctx->gbm_dev);
+    if (egl_dpy == EGL_NO_DISPLAY || !eglInitialize(egl_dpy, NULL, NULL)) {
+        log_egl_error("eglInitialize");
+        destroy_native_display(native_ctx);
+        return 1;
+    }
+
+    printf("BEKLENEN HATA: pNumConfig=NULL EGL 1.0 icin gecersiz parametredir.\n");
+    printf("GUVENLI TEST: Bu ornek kasitli olarak eglGetConfigs(..., NULL) cagirmiyor.\n");
+    printf("NEDEN: Bazi EGL suruculeri gecersiz output pointer'i icin EGL_FALSE yerine process crash uretebilir.\n");
+    printf("DOGRU DAVRANIS: Uretim kodu pNumConfig NULL ise EGL cagrisindan once reddetmelidir.\n");
+    printf("GORSEL SONUC: Config sayisi guvenli sekilde alinamadigi icin cizim kurulmaz.\n");
 
     eglTerminate(egl_dpy);
-    cleanup_drm_and_gbm(&state);
-    return -1;
+    destroy_native_display(native_ctx);
+    return 0;
 }

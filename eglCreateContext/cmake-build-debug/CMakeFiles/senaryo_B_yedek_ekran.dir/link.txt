@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_B_yedek_ekran.dir/pDpyID_farki/senaryo_B_yedek_ekran.c.o -o senaryo_B_yedek_ekran  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

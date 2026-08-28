@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_B_ortak_context.dir/uShareContext_farki/senaryo_B_ortak_context.c.o -o senaryo_B_ortak_context  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

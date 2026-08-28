@@ -1,0 +1,6 @@
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/common_utils.dir
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/ScenarioA_ValidDisplay.dir
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/ScenarioB_InvalidDisplay.dir
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/ScenarioC_UninitializedDisplay.dir
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/edit_cache.dir
+/home/osboxes/Desktop/EGL 1.0 Fonksiyon İncelenmesi/eglTerminate/cmake-build-debug/CMakeFiles/rebuild_cache.dir

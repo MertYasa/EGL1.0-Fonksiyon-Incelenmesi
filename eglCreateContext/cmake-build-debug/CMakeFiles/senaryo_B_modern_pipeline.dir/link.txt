@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_B_modern_pipeline.dir/pAttribList_farki/senaryo_B_modern_pipeline.c.o -o senaryo_B_modern_pipeline  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

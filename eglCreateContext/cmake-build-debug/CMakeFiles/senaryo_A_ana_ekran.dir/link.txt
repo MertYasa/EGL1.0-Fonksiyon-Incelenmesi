@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_A_ana_ekran.dir/pDpyID_farki/senaryo_A_ana_ekran.c.o -o senaryo_A_ana_ekran  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

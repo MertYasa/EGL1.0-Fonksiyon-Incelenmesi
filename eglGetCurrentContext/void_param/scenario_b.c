@@ -12,13 +12,21 @@ int main(void) {
     }
 
     // Ilk olarak context'i bagla ve ekrani kirmiziya boya
-    eglMakeCurrent(state.egl_display, state.egl_surface, state.egl_surface, state.egl_context);
+    if (!make_current_checked(&state, state.egl_surface, state.egl_surface, state.egl_context,
+                              "Context aktif edilemedi; senaryo temiz kapatiliyor.")) {
+        cleanup(&state);
+        return -1;
+    }
     glClearColor(1.0f, 0.0f, 0.0f, 1.0f); // Kirmizi arka plan
     glClear(GL_COLOR_BUFFER_BIT);
 
     // Bilerek context'i detach (ayirma) yapiyoruz
     printf("1. eglMakeCurrent ile aktif context kapatiliyor (EGL_NO_CONTEXT geciliyor).\n");
-    eglMakeCurrent(state.egl_display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    if (!make_current_checked(&state, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT,
+                              "Context detach edilemedi; senaryo temiz kapatiliyor.")) {
+        cleanup(&state);
+        return -1;
+    }
 
     // Context olmayan durumda eglGetCurrentContext'i cagir
     EGLContext current = eglGetCurrentContext();
@@ -35,8 +43,15 @@ int main(void) {
     printf("3. Gorsel ispat icin pencere 3 saniye acik tutuluyor. (Sadece kirmizi arka plan goreceksiniz, ucgen yok!)\n");
 
     // Ekrani guncellemek icin context'i tekrar gecici olarak bagliyoruz (sadece eglSwapBuffers yapabilmek icin, cizim YAPMIYORUZ)
-    eglMakeCurrent(state.egl_display, state.egl_surface, state.egl_surface, state.egl_context);
-    eglSwapBuffers(state.egl_display, state.egl_surface);
+    if (!make_current_checked(&state, state.egl_surface, state.egl_surface, state.egl_context,
+                              "Context tekrar baglanamadi; senaryo temiz kapatiliyor.")) {
+        cleanup(&state);
+        return -1;
+    }
+    if (!swap_buffers_checked(&state)) {
+        cleanup(&state);
+        return -1;
+    }
 
     sleep_ms(3000);
 

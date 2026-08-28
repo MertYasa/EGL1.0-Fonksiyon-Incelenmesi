@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/ScenarioA_ValidDisplay.dir/pDpyID/ScenarioA_ValidDisplay.c.o -o ScenarioA_ValidDisplay  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

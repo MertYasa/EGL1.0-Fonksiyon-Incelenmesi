@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/senaryo_A_egl10_standart.dir/pAttribList_farki/senaryo_A_egl10_standart.c.o -o senaryo_A_egl10_standart  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

@@ -1,0 +1,1 @@
+/usr/bin/cc -g CMakeFiles/ScenarioC_UninitializedDisplay.dir/pDpyID/ScenarioC_UninitializedDisplay.c.o -o ScenarioC_UninitializedDisplay  libcommon_utils.a -ldrm -lgbm -lEGL -lGLESv2 

@@ -25,15 +25,24 @@ typedef struct {
     uint32_t crtc_id;
     uint32_t connector_id;
     drmModeModeInfo mode_info;
+    drmModeCrtc *saved_crtc;
 } NativeDisplayContext;
 
 // Yardımcı Fonksiyon Prototipleri
 NativeDisplayContext* init_native_display();
+NativeDisplayContext* init_native_display_at(int connected_index);
 struct gbm_surface* create_gbm_surface(struct gbm_device *gbm_dev, int width, int height);
+struct gbm_surface* create_egl_compatible_gbm_surface(EGLDisplay display, EGLConfig config, struct gbm_device *gbm_dev, int width, int height);
 void present_native_display(NativeDisplayContext* ctx, struct gbm_surface* surface);
+void present_native_display_for(NativeDisplayContext* ctx, struct gbm_surface* surface, unsigned int seconds);
 void destroy_native_display(NativeDisplayContext* ctx);
+const char* egl_error_name(EGLint error);
+void log_egl_error(const char* operation);
+void reset_common_gl_objects(void);
 void init_simple_shader();
 void draw_triangle(float z, float r, float g, float b);
+void draw_quad(float x0, float y0, float x1, float y1, float z, float r, float g, float b);
 GLuint create_checkerboard_texture();
+void draw_textured_quad(GLuint texture_id);
 
 #endif // COMMON_UTILS_H

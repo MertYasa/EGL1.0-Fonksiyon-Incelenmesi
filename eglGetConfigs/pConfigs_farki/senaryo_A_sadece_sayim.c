@@ -1,31 +1,34 @@
 #include "../common/common_utils.h"
 
-int main() {
-    printf("--- SENARYO A: Sadece Sayim Yapma (Gorsel Sonuclu) ---\n\n");
+int main(void) {
+    printf("--- SENARYO A: pConfigs - Sadece Sayim Yapma ---\n\n");
 
-    AppState state;
-    init_drm_and_gbm(&state, 400, 400);
-    EGLDisplay egl_dpy = eglGetDisplay((EGLNativeDisplayType)state.gbm_device);
-    EGLint major, minor;
-    eglInitialize(egl_dpy, &major, &minor);
+    NativeDisplayContext* native_ctx = init_native_display();
+    if (!native_ctx) {
+        printf("Hata: Native Display (DRM/GBM) acilamadi.\n");
+        return 1;
+    }
+
+    EGLDisplay egl_dpy = get_egl_display_for_gbm(native_ctx->gbm_dev);
+    if (egl_dpy == EGL_NO_DISPLAY || !eglInitialize(egl_dpy, NULL, NULL)) {
+        log_egl_error("eglInitialize");
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
     EGLint toplam_sayi = 0;
+    if (!eglGetConfigs(egl_dpy, NULL, 0, &toplam_sayi)) {
+        log_egl_error("eglGetConfigs");
+        eglTerminate(egl_dpy);
+        destroy_native_display(native_ctx);
+        return 1;
+    }
 
-    // Config dizisi yerine NULL veriyoruz (Sadece saymak icin)
-    EGLBoolean basari = eglGetConfigs(egl_dpy, NULL, 0, &toplam_sayi);
-
-    printf("=================================================================\n");
-    printf("DURUM: eglGetConfigs basariyla (EGL_TRUE) calisti.\n");
-    printf("Sistemde %d adet config oldugu sayildi.\n", toplam_sayi);
-    printf("Ancak parametre olarak NULL (dizi yok) verdigimiz icin elimizde \n");
-    printf("EGLContext olusturacak HICBIR CONFIG HANDLE'I YOK.\n");
-    printf("Gorsel Sonuc: Config Handle'i olmadan OpenGL ES baglami acilamaz.\n");
-    printf("Ekrana cizim YAPILAMAZ! Bu kullanim sadece bilgi almak icindir.\n");
-    printf("=================================================================\n\n");
-
-    printf("Ekrana cizim yapilamadi. Program sonlandiriliyor.\n");
+    printf("BASARILI: pConfigs=NULL ve config_size=0 ile sadece config sayisi sorgulandi.\n");
+    printf("Sistemde %d adet EGLConfig var.\n", toplam_sayi);
+    printf("GORSEL SONUC: Bu senaryo bilerek cizim yapmaz; elde config handle olmadigi icin surface/context kurulmaz.\n");
 
     eglTerminate(egl_dpy);
-    cleanup_drm_and_gbm(&state);
+    destroy_native_display(native_ctx);
     return 0;
 }
